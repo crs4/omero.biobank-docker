@@ -8,7 +8,7 @@ Prerequisites
 
 * Docker
 
-To install Docker, follow this [instructions](https://docs.docker.com/installation/#installation)
+Install Docker. [Installation Guides](https://docs.docker.com/installation/#installation)
 
 Building
 --------
@@ -22,4 +22,4 @@ Type `./build.sh bundle` to build the following Docker images:
 Running
 -------
 
-Use the 'obbdock' script to start, stop and restart the omero.biobank nodes on you machine.
+Use the 'obbdock' script to start, stop and restart the omero.biobank nodes on your machine.
