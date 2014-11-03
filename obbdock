@@ -1,0 +1,177 @@
+#!/bin/bash
+
+CLIENT_IMAGE_NAME="omero.biobank.client"
+CLIENT_CONTAINER_NAME="obb_client"
+
+SERVER_IMAGE_NAME='omero.biobank.server'
+SERVER_CONTAINER_NAME='obb_server'
+
+DB_IMAGE_NAME='db.server'
+DB_CONTAINER_NAME='db_server'
+
+DOCKER=`which docker.io`
+if [[ "$DOCKER" == "" ]]; then
+    DOCKER=`which docker`
+fi
+
+function usage {
+    echo >&2
+    echo >&2 "usage: $0 (start|stop|restart|help) [options]"
+    echo >&2
+    echo >&2 "$0 start/stop/restart options:"
+    echo >&2 "  bundle                  Client, Server, DB nodes"
+    echo >&2
+    echo >&2 "  If no options are given, the action is applied to all nodes."
+}
+
+function ip_address {
+    local container=$1
+    echo `$DOCKER inspect $container  |grep IPAddress |cut -f4 -d\"`
+}
+
+function start_container {
+    local name="$1"
+    local image="$2"
+    local args="-d -i -t --hostname $name -P --name $name"
+   
+    if [[ "$name" == $SERVER_CONTAINER_NAME ]]; then
+     	args="$args --link $DB_CONTAINER_NAME:$DB_CONTAINER_NAME"
+    fi
+
+    if [[ "$name" == $CLIENT_CONTAINER_NAME ]]; then
+     	args="$args --volumes-from $SERVER_CONTAINER_NAME"
+	args="$args --link $SERVER_CONTAINER_NAME:$SERVER_CONTAINER_NAME"
+    fi
+        
+    `$DOCKER ps |grep -P "$name[^/]" -q`
+    if [[ "$?" == "0" ]]; then
+      echo "You have a running container with name $name -- skipping."
+      return
+    fi
+
+    # Remove any existing container by this name.
+    $DOCKER rm "$name" 2>/dev/null
+
+    #echo "Starting container: $container"
+    #echo "  $DOCKER run $args $image"
+    container=`$DOCKER run $args $image`
+    echo "Started container: $container"
+
+    if [[ "$name" == $CLIENT_CONTAINER_NAME || "$name" == $SERVER_CONTAINER_NAME ]];
+    then
+      ip=$(ip_address $container )      
+      echo
+      echo "You can access the container $name with:"
+      echo
+      echo "    ssh root@$ip"
+      echo
+    fi        
+
+}
+
+function do_start {
+    local start_c=false
+    local start_s=false
+    local start_d=false
+
+    while [ $# -ge 1 ]
+    do
+        case $1 in
+	    bundle)
+		start_d=true
+		start_s=true
+                start_c=true
+                shift
+                ;;	    	    
+	    *)
+                usage
+                exit 1
+                ;;
+        esac
+    done
+
+    # If no options were selected, then start all nodes.
+    if [[ $start_c == false && $start_s == false && $start_d == false ]]
+    then
+	start_c=true
+	start_s=true
+	start_d=true
+    fi
+
+    if [[ $start_d != false ]]
+    then
+        start_container $DB_CONTAINER_NAME $DB_IMAGE_NAME  
+    fi
+
+    if [[ $start_s != false ]]
+    then
+        start_container $SERVER_CONTAINER_NAME $SERVER_IMAGE_NAME  
+    fi
+
+    if [[ $start_c != false ]]
+    then
+        start_container $CLIENT_CONTAINER_NAME $CLIENT_IMAGE_NAME  
+    fi
+
+    
+}
+
+function do_stop {
+    local stop_c=''
+    local stop_s=''
+    local stop_d=''
+
+    while [ $# -ge 1 ]
+    do
+        case $1 in
+	    bundle)
+		stop_c=$CLIENT_CONTAINER_NAME
+		stop_s=$SERVER_CONTAINER_NAME
+		stop_d=$DB_CONTAINER_NAME
+		shift
+		;;           	     
+	    *)
+                usage
+                exit 1
+                ;;
+        esac
+    done
+
+    # If no options were selected, then stop all servers.
+    if [[ $stop_c == '' && $stop_s == '' && $stop_d == '' ]]
+    then
+	stop_c=$CLIENT_CONTAINER_NAME
+	stop_s=$SERVER_CONTAINER_NAME
+	stop_d=$DB_CONTAINER_NAME
+    fi
+    
+    $DOCKER stop $stop_c $stop_s $stop_d 2>/dev/null
+
+}
+
+if [ $# -lt 1 ]
+then
+  usage
+  exit 1
+fi
+
+
+case $1 in
+    start)
+        shift
+        do_start $@
+        ;;
+    stop)
+        shift
+        do_stop $@
+        ;;
+    restart)
+        shift
+        do_stop $@
+        do_start $@
+        ;;   
+    *)
+        usage
+        exit 1
+        ;;
+esac
