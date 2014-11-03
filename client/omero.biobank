@@ -1,0 +1,17 @@
+#!/bin/bash
+# This script is run by Supervisor to install OMERO.biobank in foreground mode
+set -e
+set -u
+set -x
+
+mkdir -p /opt/omero/lib
+ln -s /home/omero/ome/dist/lib/python/ /opt/omero/lib
+echo 'export PYTHONPATH="/opt/omero/lib/python/"' >> /etc/bash.bashrc
+
+cd /opt 
+git clone https://github.com/crs4/omero.biobank 
+cd omero.biobank 
+git checkout develop 
+python setup.py install
+python build_configuration.py -H obb_server -U root -P omero --profile
+cat obb_server.biobank.profile >> /etc/bash.bashrc
