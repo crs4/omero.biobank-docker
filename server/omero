@@ -1,0 +1,15 @@
+#!/bin/bash
+# This script is run by Supervisor to start OMERO in foreground mode
+set -e
+set -u
+set -x
+
+cd /home/omero/ome/dist
+
+#rm -rf /opt/omero/var
+mkdir -p var
+mkdir -p var/master
+mkdir -p var/registry
+chown -R omero:omero var
+
+exec su omero -c 'icegridnode --nochdir --Ice.Config=etc/internal.cfg,etc/master.cfg --deploy etc/grid/default.xml'
