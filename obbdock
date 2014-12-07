@@ -1,13 +1,16 @@
 #!/bin/bash
 
+CUSTOM_CLIENT_IMAGE_NAME="omero.biobank.custom_client"
+CUSTOM_CLIENT_CONTAINER_NAME="obb_custom_client"
+
 CLIENT_IMAGE_NAME="omero.biobank.client"
 CLIENT_CONTAINER_NAME="obb_client"
 
 SERVER_IMAGE_NAME='omero.biobank.server'
 SERVER_CONTAINER_NAME='obb_server'
 
-DB_IMAGE_NAME='db.server'
-DB_CONTAINER_NAME='db_server'
+DB_IMAGE_NAME='omero.biobank.db.server'
+DB_CONTAINER_NAME='obb_db_server'
 
 DOCKER=`which docker.io`
 if [[ "$DOCKER" == "" ]]; then
@@ -16,12 +19,13 @@ fi
 
 function usage {
     echo >&2
-    echo >&2 "usage: $0 (start|stop|restart|help) [options]"
+    echo >&2 "usage: $0 (start|stop|restart|help) [argument]"
     echo >&2
-    echo >&2 "$0 start/stop/restart options:"
+    echo >&2 "$0 start/stop/restart arguments:"
     echo >&2 "  bundle                  Client, Server, DB nodes"
+    echo >&2 "  cclient                 Client node, only if you have builded a custom Omero.biobank client"
     echo >&2
-    echo >&2 "  If no options are given, the action is applied to all nodes."
+
 }
 
 function ip_address {
@@ -57,7 +61,9 @@ function start_container {
     container=`$DOCKER run $args $image`
     echo "Started container: $container"
 
-    if [[ "$name" == $CLIENT_CONTAINER_NAME || "$name" == $SERVER_CONTAINER_NAME ]];
+    if [[ "$name" == $CLIENT_CONTAINER_NAME || \
+	  "$name" == $SERVER_CONTAINER_NAME || \
+	  "$name" == $CUSTOM_CLIENT_CONTAINER_NAME ]];
     then
       ip=$(ip_address $container )      
       echo
@@ -71,32 +77,39 @@ function start_container {
 
 function do_start {
     local start_c=false
+    local start_cc=false
     local start_s=false
     local start_d=false
 
-    while [ $# -ge 1 ]
-    do
+    if [ $# -ge 1 ]
+    then
         case $1 in
 	    bundle)
 		start_d=true
 		start_s=true
                 start_c=true
                 shift
-                ;;	    	    
+                ;;
+	    cclient)
+		start_cc=true
+		shift
+		;;
 	    *)
                 usage
                 exit 1
                 ;;
         esac
-    done
-
-    # If no options were selected, then start all nodes.
-    if [[ $start_c == false && $start_s == false && $start_d == false ]]
-    then
-	start_c=true
-	start_s=true
-	start_d=true
+    else
+	usage
     fi
+
+    # # If no options were selected, then start all nodes.
+    # if [[ $start_c == false && $start_s == false && $start_d == false && $start_cc == false ]]
+    # then
+    # 	start_c=true
+    # 	start_s=true
+    # 	start_d=true
+    # fi
 
     if [[ $start_d != false ]]
     then
@@ -113,39 +126,46 @@ function do_start {
         start_container $CLIENT_CONTAINER_NAME $CLIENT_IMAGE_NAME  
     fi
 
+    if [[ $start_cc != false ]]
+    then
+        start_container $CUSTOM_CLIENT_CONTAINER_NAME $CUSTOM_CLIENT_IMAGE_NAME  
+    fi
+
     
 }
 
 function do_stop {
     local stop_c=''
+    local stop_cc=''
     local stop_s=''
     local stop_d=''
 
-    while [ $# -ge 1 ]
-    do
+    if [ $# -ge 1 ]
+    then
         case $1 in
 	    bundle)
 		stop_c=$CLIENT_CONTAINER_NAME
 		stop_s=$SERVER_CONTAINER_NAME
 		stop_d=$DB_CONTAINER_NAME
 		shift
-		;;           	     
+		;;   
+            cclient)
+		stop_cc=$CUSTOM_CLIENT_CONTAINER_NAME
+		shift
+		;;
 	    *)
                 usage
                 exit 1
                 ;;
         esac
-    done
-
-    # If no options were selected, then stop all servers.
-    if [[ $stop_c == '' && $stop_s == '' && $stop_d == '' ]]
-    then
-	stop_c=$CLIENT_CONTAINER_NAME
-	stop_s=$SERVER_CONTAINER_NAME
-	stop_d=$DB_CONTAINER_NAME
+	$DOCKER stop $stop_cc $stop_c $stop_s $stop_d 2>/dev/null
+    else
+	for c in `docker ps | grep 'obb' | sed -e 's/   */\+/g' | cut -f7 -d+` 
+	do
+	    $DOCKER stop $c 
+	done
     fi
-    
-    $DOCKER stop $stop_c $stop_s $stop_d 2>/dev/null
+
 
 }
 
